@@ -1,55 +1,48 @@
 import os
-import librosa
 import numpy as np
+import librosa
+import librosa.display
+import glob
+import pandas as pd
 
-# Correct dataset path
-dataset_path = "C:/Users/ASUS/OneDrive/Desktop/speech_emotion_classification/datasets/hindi"
+# Define paths
+DATASET_PATH = "../datasets/"
+RESULTS_PATH = "../results/"
 
-# Ensure the output directory exists
-output_dir = "C:/Users/ASUS/OneDrive/Desktop/speech_emotion_classification/results"
-os.makedirs(output_dir, exist_ok=True)
+# Ensure results directory exists
+os.makedirs(RESULTS_PATH, exist_ok=True)
 
-# Define the emotions to process
-emotions = ["happy", "neutral", "sad", "fear"]  # Excluding 'angry'
-
-# Initialize feature storage
-features = []
-
-# Loop through each emotion folder
-for emotion in emotions:
-    emotion_path = os.path.join(dataset_path, emotion)
-
-    # Check if folder exists
-    if not os.path.exists(emotion_path):
-        print(f"⚠️ Skipping missing folder: {emotion_path}")
-        continue
+# Function to extract MFCC features
+def extract_features(file_path, max_pad_length=128):
+    y, sr = librosa.load(file_path, sr=22050)
+    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40)
     
-    print(f"🔍 Processing emotion: {emotion}")
+    # Padding or truncating to ensure fixed size
+    pad_width = max_pad_length - mfcc.shape[1]
+    if pad_width > 0:
+        mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode='constant')
+    else:
+        mfcc = mfcc[:, :max_pad_length]
+    
+    return mfcc
 
-    # Process each file in the folder
-    for file in os.listdir(emotion_path):
-        if file.endswith(".wav"):
-            file_path = os.path.join(emotion_path, file)
+# Load dataset (Modify this based on your dataset structure)
+audio_files = glob.glob(DATASET_PATH + "**/*.wav", recursive=True)
+labels = []
 
-            try:
-                # Load the audio file
-                y, sr = librosa.load(file_path, sr=None)
+features = []
+for file in audio_files:
+    label = os.path.basename(os.path.dirname(file))  # Assumes folder name is the label
+    labels.append(label)
+    features.append(extract_features(file))
 
-                # Extract MFCC features
-                mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-                mfccs_mean = np.mean(mfccs, axis=1)  # Take the mean of each MFCC
+features = np.array(features)
+labels = np.array(labels)
 
-                # Store the extracted features along with the label
-                features.append((mfccs_mean, emotion))
+# Save extracted features and labels
+np.save(os.path.join(RESULTS_PATH, "features.npy"), features)
+np.save(os.path.join(RESULTS_PATH, "labels.npy"), labels)
 
-            except Exception as e:
-                print(f"❌ Error processing {file}: {e}")
-
-# Convert to numpy array
-features = np.array(features, dtype=object)
-
-# Save the extracted features
-features_path = os.path.join(output_dir, "features.npy")
-np.save(features_path, features)
-
-print(f"✅ Feature extraction complete! Saved to {features_path}")
+print("✅ Feature extraction completed. Files saved in /results/")
+print(f"🔹 Features shape: {features.shape}")
+print(f"🔹 Labels shape: {labels.shape}")
